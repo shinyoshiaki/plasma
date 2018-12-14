@@ -4,11 +4,14 @@ const arrayLib = artifacts.require("./ArrayLib");
 const RLP = artifacts.require("./RLP");
 
 module.exports = function(deployer) {
-    deployer.deploy(minHeapLib);
-    deployer.deploy(arrayLib);
-    deployer.deploy(RLP);
-    deployer.link(minHeapLib, PlasmaChainManager);
-    deployer.link(arrayLib, PlasmaChainManager);
-    deployer.link(RLP, PlasmaChainManager);
-    deployer.deploy(PlasmaChainManager, 7 * 86400, 14 * 86400);
+  deployer.deploy(minHeapLib);
+  deployer.deploy(arrayLib);
+  deployer.deploy(RLP);
+  deployer.link(minHeapLib, PlasmaChainManager);
+  deployer.link(arrayLib, PlasmaChainManager);
+  deployer.link(RLP, PlasmaChainManager);
+  const exitAge = 10;
+  //   7 * (60 * 60 * 24);
+  const exitWait = exitAge * 2;
+  deployer.deploy(PlasmaChainManager, exitAge, exitWait);
 };

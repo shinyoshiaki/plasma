@@ -52,7 +52,7 @@ contract PlasmaChainManager {
     mapping(uint256 => WithdrawRecord) public withdrawRecords;
     MinHeapLib.Heap exits;
 
-    function PlasmaChainManager(uint256 exitAge, uint256 exitWait) public {
+    constructor(uint256 exitAge, uint256 exitWait) public {
         owner = msg.sender;
         lastBlockNumber = 0;
         txCounter = 0;
@@ -63,7 +63,7 @@ contract PlasmaChainManager {
     event HeaderSubmittedEvent(address signer, uint32 blockNumber);
 
     function submitBlockHeader(bytes header) public returns (bool success) {
-        require(header.length == blockHeaderLength);
+        require(header.length == blockHeaderLength,"require(header.length == blockHeaderLength);");
 
         bytes32 blockNumber;
         bytes32 previousHash;
@@ -83,13 +83,12 @@ contract PlasmaChainManager {
         }
 
         // Check the block number.
-        require(uint8(blockNumber) == lastBlockNumber + 1);
+        require(uint8(blockNumber) == lastBlockNumber + 1,"require(uint8(blockNumber) == lastBlockNumber + 1);");
 
         // Check the signature.
-        bytes32 blockHash = keccak256(PersonalMessagePrefixBytes, blockNumber,
-            previousHash, merkleRoot);
+        bytes32 blockHash = keccak256(PersonalMessagePrefixBytes, blockNumber, previousHash, merkleRoot);
         address signer = ecrecover(blockHash, uint8(sigV), sigR, sigS);
-        require(msg.sender == signer);
+        require(msg.sender == signer,"require(msg.sender == signer);");
 
         // Append the new header.
         BlockHeader memory newHeader = BlockHeader({
@@ -107,14 +106,13 @@ contract PlasmaChainManager {
         lastBlockNumber += 1;
         txCounter = 0;
 
-        HeaderSubmittedEvent(signer, uint8(blockNumber));
+        emit HeaderSubmittedEvent(signer, uint8(blockNumber));
         return true;
     }
 
-    event DepositEvent(address from, uint256 amount,
-        uint256 indexed blockNumber, uint256 txIndex);
+    event DepositEvent(address from, uint256 amount, uint256 indexed blockNumber, uint256 txIndex);
 
-    function deposit() payable public returns (bool success) {
+    function deposit()public payable returns (bool success) {
         DepositRecord memory newDeposit = DepositRecord({
             blockNumber: lastBlockNumber,
             txIndex: txCounter,
@@ -123,9 +121,8 @@ contract PlasmaChainManager {
             timeCreated: now
         });
         depositRecords[msg.sender].push(newDeposit);
-        txCounter += 1;
-        DepositEvent(msg.sender, msg.value, newDeposit.blockNumber,
-            newDeposit.txIndex);
+        txCounter++;
+        emit DepositEvent(msg.sender, msg.value, newDeposit.blockNumber, newDeposit.txIndex);
         return true;
     }
 
@@ -137,28 +134,25 @@ contract PlasmaChainManager {
         uint256 oIndex,
         bytes targetTx,
         bytes proof
-    )
-        public
-        returns (uint256 withdrawalId)
-    {
+    )public returns (uint256 withdrawalId){
         BlockHeader memory header = headers[blockNumber];
-        require(header.blockNumber > 0);
+        require(header.blockNumber > 0,"genesis block");
 
         var txList = targetTx.toRLPItem().toList();
-        require(txList.length == 13);
+        require(txList.length == 13,"not 13");
 
         // Check if the target transaction is in the block.
-        require(isValidProof(header.merkleRoot, targetTx, proof));
+        require(isValidProof(header.merkleRoot, targetTx, proof),"not valid proof");
 
         // Check if the transaction owner is the sender.
         address txOwner = txList[6 + 2 * oIndex].toAddress();
-        require(txOwner == msg.sender);
+        require(txOwner == msg.sender,"txOwner == msg.sender");
 
         // Generate a new withdrawal ID.
         uint256 priority = max(header.timeSubmitted, now - exitAgeOffset);
         withdrawalId = blockNumber * 1000000 + txIndex * 1000 + oIndex;
         WithdrawRecord storage record = withdrawRecords[withdrawalId];
-        require(record.blockNumber == 0);
+        require(record.blockNumber == 0,"record.blockNumber == 0");
 
         // Construct a new withdrawal.
         record.blockNumber = blockNumber;
@@ -171,7 +165,7 @@ contract PlasmaChainManager {
         exits.add(priority);
         withdrawalIds[priority].push(withdrawalId);
 
-        WithdrawalStartedEvent(withdrawalId);
+        emit WithdrawalStartedEvent(withdrawalId);
         return withdrawalId;
     }
 
@@ -180,52 +174,47 @@ contract PlasmaChainManager {
     function challengeWithdrawal(
         uint256 withdrawalId,
         uint256 blockNumber,
-        uint256 txIndex,
-        uint256 oIndex,
         bytes targetTx,
         bytes proof
-    )
-        public
-        returns (bool success)
-    {
+    )public returns (bool success){
         BlockHeader memory header = headers[blockNumber];
-        require(header.blockNumber > 0);
+        require(header.blockNumber > 0,"require(header.blockNumber > 0)");
 
         var txList = targetTx.toRLPItem().toList();
-        require(txList.length == 13);
+        require(txList.length == 13,"require(txList.length == 13);");
 
         // Check if the transaction is in the block.
-        require(isValidProof(header.merkleRoot, targetTx, proof));
+        require(isValidProof(header.merkleRoot, targetTx, proof),"require(isValidProof(header.merkleRoot, targetTx, proof));");
 
         // Check if the withdrawal exists.
         WithdrawRecord memory record = withdrawRecords[withdrawalId];
-        require(record.blockNumber > 0);
+        require(record.blockNumber > 0,"require(record.blockNumber > 0);");
 
         // The transaction spends the given withdrawal on plasma chain.
         if (isWithdrawalSpent(targetTx, record)) {
             withdrawalIds[record.priority].remove(withdrawalId);
             delete withdrawRecords[withdrawalId];
 
-            WithdrawalChallengedEvent(withdrawalId);
+            emit WithdrawalChallengedEvent(withdrawalId);
             return true;
         }
 
         return false;
     }
 
-    event WithdrawalCompleteEvent(uint256 indexed blockNumber,
-        uint256 exitBlockNumber, uint256 exitTxIndex, uint256 exitOIndex);
+    event WithdrawalCompleteEvent(uint256 indexed blockNumber, uint256 exitBlockNumber, uint256 exitTxIndex, uint256 exitOIndex);
 
     function finalizeWithdrawal() public returns (bool success) {
-        while (!exits.isEmpty() && now > exits.peek() + exitWaitOffset) {
+        while (!exits.isEmpty()
+        // && now > exits.peek() + exitWaitOffset
+        ) {
             uint256 priority = exits.pop();
             for (uint256 i = 0; i < withdrawalIds[priority].length; i++) {
                 uint256 index = withdrawalIds[priority][i];
                 WithdrawRecord memory record = withdrawRecords[index];
                 record.beneficiary.transfer(record.amount);
 
-                WithdrawalCompleteEvent(lastBlockNumber, record.blockNumber,
-                    record.txIndex, record.oIndex);
+                emit WithdrawalCompleteEvent(lastBlockNumber, record.blockNumber, record.txIndex, record.oIndex);
                 delete withdrawRecords[index];
             }
             delete withdrawalIds[priority];
@@ -233,11 +222,7 @@ contract PlasmaChainManager {
         return true;
     }
 
-    function isValidProof(bytes32 root, bytes target, bytes proof)
-        pure
-        internal
-        returns (bool valid)
-    {
+    function isValidProof(bytes32 root, bytes target, bytes proof)internal pure returns (bool valid){
         bytes32 hash = keccak256(target);
         for (uint i = 32; i < proof.length; i += 33) {
             bytes1 flag;
@@ -255,17 +240,13 @@ contract PlasmaChainManager {
         return hash == root;
     }
 
-    function max(uint256 a, uint256 b) pure internal returns (uint256 result) {
+    function max(uint256 a, uint256 b) internal pure returns (uint256 result) {
         return (a > b) ? a : b;
     }
 
-    function isWithdrawalSpent(bytes targetTx, WithdrawRecord record)
-        view
-        internal
-        returns (bool spent)
-    {
+    function isWithdrawalSpent(bytes targetTx, WithdrawRecord record)internal view returns (bool spent){
         var txList = targetTx.toRLPItem().toList();
-        require(txList.length == 13);
+        require(txList.length == 13,"txList.length == 13");
 
         // Check two inputs individually if it spent the given withdrawal.
         for (uint256 i = 0; i < 2; i++) {

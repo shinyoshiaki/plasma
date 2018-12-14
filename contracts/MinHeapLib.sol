@@ -19,13 +19,13 @@ library MinHeapLib {
         }
     }
 
-    function peek(Heap storage _heap) view internal returns (uint256 value) {
-        require(_heap.data.length > 0);
+    function peek(Heap storage _heap) internal view returns (uint256 value) {
+        require(_heap.data.length > 0,"require(_heap.data.length > 0);");
         return _heap.data[0];
     }
 
     function pop(Heap storage _heap) internal returns (uint256 value) {
-        require(_heap.data.length > 0);
+        require(_heap.data.length > 0,"require(_heap.data.length > 0);");
         uint256 root = _heap.data[0];
         _heap.data[0] = _heap.data[_heap.data.length - 1];
         _heap.data.length -= 1;
@@ -51,7 +51,7 @@ library MinHeapLib {
         }
     }
 
-    function isEmpty(Heap storage _heap) view internal returns (bool empty) {
+    function isEmpty(Heap storage _heap) internal view returns (bool empty) {
         return _heap.data.length == 0;
     }
 }
